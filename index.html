@@ -1,0 +1,562 @@
+import React, { useState, useMemo, useEffect } from 'react';
+import { 
+  Heart, Droplets, Sparkles, FlaskConical, ShieldCheck, 
+  Calendar, Plus, Search, LayoutDashboard, BookOpen, 
+  Package, Sun, Moon, Star, ChevronRight, Clock,
+  LogOut, Upload, X, Image as ImageIcon, AlertCircle, UserCircle
+} from 'lucide-react';
+
+// --- Firebase Imports ---
+import { initializeApp } from 'firebase/app';
+import { 
+  getAuth, 
+  onAuthStateChanged, 
+  signOut,
+  signInAnonymously,
+  signInWithCustomToken
+} from 'firebase/auth';
+import { 
+  getFirestore, 
+  collection, 
+  doc, 
+  setDoc, 
+  onSnapshot
+} from 'firebase/firestore';
+
+// --- Firebase 初始化 ---
+const defaultFirebaseConfig = {
+  apiKey: "AIzaSyBvHTkZkdPdT99B9EM5uStPOFALd2d0miw",
+  authDomain: "face-cdcf6.firebaseapp.com",
+  projectId: "face-cdcf6",
+  storageBucket: "face-cdcf6.firebasestorage.app",
+  messagingSenderId: "91272584568",
+  appId: "1:91272584568:web:d97f732af144e5b546bc8d"
+};
+
+const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : defaultFirebaseConfig;
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const currentAppId = typeof __app_id !== 'undefined' ? __app_id : "face-cdcf6";
+
+// --- 預設產品資料 ---
+const initialProducts = [
+  { id: 'p1', brand: '寶拉珍選', name: '2%水楊酸精華液', function: '去角質/煥膚', price: 1080, originalPrice: 1200, rating: 5, icon: 'FlaskConical', description: '溫和代謝老廢角質，暢通毛孔', isCustom: false },
+  { id: 'p2', brand: '寶拉珍選', name: '10%B3毛孔調理美白精萃', function: '美白/提亮', price: 1485, originalPrice: 1650, rating: 5, icon: 'Sparkles', description: '緊緻毛孔，均勻膚色，強化屏障', isCustom: false },
+  { id: 'p3', brand: 'KIEHL\'S 契爾氏', name: '淡斑精華50ml超級熱銷組', function: '美白/提亮', price: 3240, originalPrice: 3600, rating: 5, icon: 'Sparkles', description: '價值NT$9,155，專利激光活能C', isCustom: false },
+  { id: 'p4', brand: 'KIEHL\'S 契爾氏', name: '金盞花化妝水超級熱銷組', function: '舒緩/保濕', price: 2385, originalPrice: 2650, rating: 5, icon: 'Droplets', description: '價值NT$6,076，極效修護舒緩泛紅', isCustom: false },
+  { id: 'p5', brand: 'KIEHL\'S 契爾氏', name: 'A醇精華50ml超級熱銷組', function: '抗老/撫紋', price: 3420, originalPrice: 3800, rating: 5, icon: 'ShieldCheck', description: '價值NT$9,155，溫和煥膚抗老', isCustom: false },
+  { id: 'p6', brand: 'KIEHL\'S 契爾氏', name: '冰河醣吸油凝凍50ml超級熱銷組', function: '控油/保濕', price: 1440, originalPrice: 1600, rating: 5, icon: 'Droplets', description: '價值NT$3,168，清爽保濕零油光', isCustom: false },
+  { id: 'p7', brand: 'KIEHL\'S 契爾氏', name: '三酸精華VIP瘋賣組', function: '去角質/煥膚', price: 3600, originalPrice: 4000, rating: 5, icon: 'FlaskConical', description: '價值NT$6,136，水感煥膚NO.1', isCustom: false },
+];
+
+const categories = ['全部', '去角質/煥膚', '美白/提亮', '舒緩/保濕', '控油/保濕', '抗老/撫紋'];
+
+// ==========================================
+// 主應用程式 (負責登入狀態管理)
+// ==========================================
+export default function App() {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [authError, setAuthError] = useState('');
+
+  useEffect(() => {
+    const initAuth = async () => {
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+      } catch (error) {
+        console.error("Auth init error:", error);
+        setAuthError(error.message);
+        setLoading(false);
+      }
+    };
+
+    initAuth();
+
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  if (loading) {
+    return <div className="min-h-screen flex items-center justify-center bg-slate-50 text-teal-600"><Sparkles className="animate-spin w-10 h-10" /></div>;
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col justify-center items-center p-4">
+        <div className="bg-white p-10 rounded-3xl shadow-xl border border-slate-100 max-w-md w-full text-center">
+          <div className="w-16 h-16 bg-teal-600 rounded-2xl flex items-center justify-center text-white mx-auto shadow-lg shadow-teal-200 mb-6">
+            <Sparkles size={32} />
+          </div>
+          <h1 className="text-2xl font-bold text-slate-800 mb-2">DermaTrack</h1>
+          <p className="text-sm text-slate-500 mb-8">醫美級保養管家，您的雲端數位化妝台</p>
+          
+          {authError ? (
+            <div className="mb-6 p-4 bg-rose-50 border border-rose-200 rounded-xl flex items-start text-left text-sm text-rose-600">
+              <AlertCircle size={18} className="mr-2 flex-shrink-0 mt-0.5" />
+              <span>授權失敗：{authError}</span>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center space-y-4 text-teal-600">
+               <Sparkles className="animate-spin w-8 h-8" />
+               <p className="text-sm font-medium">安全登入中...</p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return <MainApp user={user} />;
+}
+
+// ==========================================
+// 核心應用程式介面
+// ==========================================
+function MainApp({ user }) {
+  const [activeTab, setActiveTab] = useState('dashboard');
+  
+  // --- 狀態 ---
+  const [userProducts, setUserProducts] = useState([]); // 用戶自建產品 (含圖片)
+  const [inventory, setInventory] = useState([]); // 服役中產品 ID
+  const [routineAM, setRoutineAM] = useState([]); 
+  const [routinePM, setRoutinePM] = useState([]);
+
+  const [selectedCategory, setSelectedCategory] = useState('全部');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  
+  // 新增產品的表單狀態
+  const [newProduct, setNewProduct] = useState({
+    name: '', brand: '', function: '舒緩/保濕', price: '', description: '', imageBase64: ''
+  });
+
+  const allProducts = useMemo(() => [...initialProducts, ...userProducts], [userProducts]);
+
+  // --- Firebase 資料同步 ---
+  useEffect(() => {
+    if (!user) return;
+
+    // 1. 監聽用戶自定義產品 (Collection)
+    const customProductsRef = collection(db, 'artifacts', currentAppId, 'users', user.uid, 'customProducts');
+    const unsubProducts = onSnapshot(customProductsRef, (snapshot) => {
+      const custom = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), isCustom: true }));
+      setUserProducts(custom);
+    }, (error) => console.error("加載自訂產品失敗", error));
+
+    // 2. 監聽用戶個人設定資料 (Document: inventory, routines)
+    const profileRef = doc(db, 'artifacts', currentAppId, 'users', user.uid, 'profile', 'data');
+    const unsubProfile = onSnapshot(profileRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data.inventory) setInventory(data.inventory);
+        if (data.routineAM) setRoutineAM(data.routineAM);
+        if (data.routinePM) setRoutinePM(data.routinePM);
+      }
+    }, (error) => console.error("加載設定資料失敗", error));
+
+    return () => {
+      unsubProducts();
+      unsubProfile();
+    };
+  }, [user]);
+
+  // --- Firestore 更新函數 ---
+  const updateProfileData = async (newData) => {
+    if (!user) return;
+    const profileRef = doc(db, 'artifacts', currentAppId, 'users', user.uid, 'profile', 'data');
+    try {
+      await setDoc(profileRef, newData, { merge: true });
+    } catch (e) {
+      console.error("更新資料失敗", e);
+    }
+  };
+
+  const toggleInventory = (productId) => {
+    let newInv;
+    if (inventory.includes(productId)) {
+      newInv = inventory.filter(id => id !== productId);
+    } else {
+      newInv = [...inventory, productId];
+    }
+    setInventory(newInv); // 樂觀更新UI
+    updateProfileData({ inventory: newInv });
+  };
+
+  const handleLogout = () => {
+    signOut(auth);
+  };
+
+  // --- 圖片上傳轉 Base64 ---
+  const handleImageUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setNewProduct(prev => ({ ...prev, imageBase64: reader.result }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSaveProduct = async () => {
+    if (!newProduct.name || !newProduct.brand || !user) return;
+    
+    const newDocRef = doc(collection(db, 'artifacts', currentAppId, 'users', user.uid, 'customProducts'));
+    const productData = {
+      ...newProduct,
+      price: Number(newProduct.price) || 0,
+      originalPrice: Number(newProduct.price) || 0,
+      rating: 5,
+    };
+
+    try {
+      await setDoc(newDocRef, productData);
+      setIsModalOpen(false);
+      setNewProduct({ name: '', brand: '', function: '舒緩/保濕', price: '', description: '', imageBase64: '' });
+    } catch (e) {
+      console.error("儲存產品失敗", e);
+    }
+  };
+
+  // --- 輔助函數 ---
+  const getIcon = (product) => {
+    if (product.imageBase64) {
+      return <img src={product.imageBase64} alt={product.name} className="w-full h-full object-cover rounded-xl" />;
+    }
+    switch(product.icon) {
+      case 'FlaskConical': return <FlaskConical className="w-8 h-8 text-teal-600" />;
+      case 'Sparkles': return <Sparkles className="w-8 h-8 text-teal-600" />;
+      case 'Droplets': return <Droplets className="w-8 h-8 text-teal-600" />;
+      case 'ShieldCheck': return <ShieldCheck className="w-8 h-8 text-teal-600" />;
+      default: return <Heart className="w-8 h-8 text-teal-600" />;
+    }
+  };
+
+  const calculateDiscount = (price, original) => Math.round((price / original) * 100);
+
+  const filteredProducts = useMemo(() => {
+    return allProducts.filter(p => {
+      const matchCat = selectedCategory === '全部' || p.function === selectedCategory;
+      const matchSearch = p.name.includes(searchTerm) || p.brand.includes(searchTerm);
+      return matchCat && matchSearch;
+    });
+  }, [allProducts, selectedCategory, searchTerm]);
+
+  // --- 視圖組件 ---
+  const renderDashboard = () => {
+    const totalValue = inventory.reduce((sum, id) => {
+      const item = allProducts.find(p => p.id === id);
+      return sum + (item ? item.price : 0);
+    }, 0);
+
+    return (
+      <div className="space-y-6 animate-in fade-in duration-500">
+        <h2 className="text-2xl font-light text-slate-800 tracking-wider border-b pb-4">保養數據總覽 <span className="font-semibold text-teal-600">Overview</span></h2>
+        
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center space-x-4">
+            <div className="p-4 bg-teal-50 text-teal-600 rounded-xl"><Package size={24}/></div>
+            <div>
+              <p className="text-sm text-slate-500 font-medium">服役中保養品</p>
+              <p className="text-3xl font-light text-slate-800">{inventory.length} <span className="text-base">件</span></p>
+            </div>
+          </div>
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center space-x-4">
+            <div className="p-4 bg-blue-50 text-blue-600 rounded-xl"><Sparkles size={24}/></div>
+            <div>
+              <p className="text-sm text-slate-500 font-medium">總資產價值</p>
+              <p className="text-3xl font-light text-slate-800">NT$ {totalValue.toLocaleString()}</p>
+            </div>
+          </div>
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center space-x-4">
+            <div className="p-4 bg-purple-50 text-purple-600 rounded-xl"><Clock size={24}/></div>
+            <div>
+              <p className="text-sm text-slate-500 font-medium">建立流程數</p>
+              <p className="text-3xl font-light text-slate-800">2 <span className="text-base">組</span></p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-100 mt-8 relative overflow-hidden">
+          <div className="absolute top-0 right-0 p-8 opacity-5"><FlaskConical size={120} /></div>
+          <h3 className="text-lg font-semibold text-slate-700 mb-4 flex items-center"><ShieldCheck className="mr-2 text-teal-500"/> 雲端同步分析</h3>
+          <p className="text-slate-600 leading-relaxed mb-4">
+            哈囉 {user.isAnonymous ? '訪客' : user.displayName}，您的保養庫存已安全同步至雲端。根據您目前的化妝台狀態，建議適時補充精華液與防曬產品，以維持肌膚完美屏障。
+          </p>
+          <button onClick={() => setActiveTab('catalog')} className="inline-flex items-center text-sm text-teal-700 bg-teal-50 px-4 py-2 rounded-full cursor-pointer hover:bg-teal-100 transition">
+            前往探索產品 <ChevronRight size={16} className="ml-1"/>
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  const renderCatalog = () => (
+    <div className="space-y-6 animate-in fade-in duration-500 relative">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b pb-4">
+        <h2 className="text-2xl font-light text-slate-800 tracking-wider">產品資料庫 <span className="font-semibold text-teal-600">Catalog</span></h2>
+        <div className="flex gap-2 w-full md:w-auto">
+          <div className="flex bg-white rounded-full border border-slate-200 p-1 px-2 items-center flex-1 md:w-64 shadow-sm">
+            <Search size={18} className="text-slate-400 mx-2" />
+            <input 
+              type="text" 
+              placeholder="搜尋產品名稱..." 
+              className="outline-none py-1 w-full text-sm bg-transparent"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+          <button 
+            onClick={() => setIsModalOpen(true)}
+            className="bg-teal-600 text-white p-2 px-4 rounded-full shadow-md hover:bg-teal-700 transition flex items-center text-sm"
+          >
+            <Plus size={16} className="md:mr-1" /> <span className="hidden md:inline">新增自訂產品</span>
+          </button>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-2 py-2">
+        {categories.map(cat => (
+          <button
+            key={cat}
+            onClick={() => setSelectedCategory(cat)}
+            className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-300 ${
+              selectedCategory === cat 
+              ? 'bg-teal-600 text-white shadow-md' 
+              : 'bg-white text-slate-600 border border-slate-200 hover:border-teal-300 hover:text-teal-600'
+            }`}
+          >
+            {cat}
+          </button>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 pt-4">
+        {filteredProducts.map(product => (
+          <div key={product.id} className="bg-white rounded-2xl overflow-hidden shadow-sm border border-slate-100 hover:shadow-lg transition-all duration-300 group flex flex-col relative">
+            {product.isCustom && <span className="absolute top-2 right-2 z-10 bg-purple-500 text-white text-[10px] px-2 py-1 rounded-full font-medium">自訂</span>}
+            <div className="h-48 bg-slate-50 flex items-center justify-center relative p-6">
+              <span className="absolute top-3 left-3 bg-slate-800 text-white text-xs px-2 py-1 rounded font-medium tracking-wider z-10">
+                {product.brand}
+              </span>
+              <div className="transform group-hover:scale-110 transition-transform duration-500 w-full h-full flex items-center justify-center">
+                {getIcon(product)}
+              </div>
+            </div>
+            <div className="p-5 flex-1 flex flex-col">
+              <div className="flex justify-between items-start mb-2">
+                <span className="text-xs font-semibold text-teal-600 bg-teal-50 px-2 py-1 rounded">{product.function}</span>
+              </div>
+              <h3 className="font-semibold text-slate-800 mt-1 line-clamp-2">{product.name}</h3>
+              <p className="text-xs text-slate-500 mt-2 mb-4 line-clamp-1">{product.description || '無描述'}</p>
+              
+              <div className="mt-auto">
+                <div className="flex items-baseline space-x-2">
+                  <span className="text-lg font-bold text-slate-800">NT${product.price?.toLocaleString()}</span>
+                </div>
+                <button 
+                  onClick={() => toggleInventory(product.id)}
+                  className={`w-full mt-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    inventory.includes(product.id) 
+                    ? 'bg-rose-50 text-rose-500 hover:bg-rose-100' 
+                    : 'bg-slate-800 text-white hover:bg-teal-600'
+                  }`}
+                >
+                  {inventory.includes(product.id) ? '從化妝台移除' : '加入化妝台'}
+                </button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  const renderStash = () => {
+    const stashItems = inventory.map(id => allProducts.find(p => p.id === id)).filter(Boolean);
+
+    return (
+      <div className="space-y-6 animate-in fade-in duration-500">
+        <h2 className="text-2xl font-light text-slate-800 tracking-wider border-b pb-4">我的化妝台 <span className="font-semibold text-teal-600">My Stash</span></h2>
+        
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-100 text-sm text-slate-500">
+                <th className="p-4 font-medium w-1/2">產品資訊</th>
+                <th className="p-4 font-medium">功能屬性</th>
+                <th className="p-4 font-medium text-right">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {stashItems.length === 0 ? (
+                <tr><td colSpan="3" className="text-center p-8 text-slate-400">目前化妝台空空如也，去產品庫挑選吧！</td></tr>
+              ) : stashItems.map((item, index) => (
+                <tr key={index} className="border-b border-slate-50 hover:bg-slate-50/50 transition">
+                  <td className="p-4 flex items-center space-x-4">
+                    <div className="w-12 h-12 bg-slate-100 rounded-lg flex items-center justify-center overflow-hidden">
+                      {getIcon(item)}
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500">{item.brand} {item.isCustom && '(自訂)'}</p>
+                      <p className="font-medium text-slate-800 text-sm md:text-base">{item.name}</p>
+                    </div>
+                  </td>
+                  <td className="p-4">
+                    <span className="text-xs font-medium text-teal-700 bg-teal-50 border border-teal-100 px-2.5 py-1 rounded-full">{item.function}</span>
+                  </td>
+                  <td className="p-4 text-right">
+                    <button 
+                      onClick={() => toggleInventory(item.id)}
+                      className="text-rose-500 text-sm hover:underline font-medium"
+                    >
+                      移出庫存
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
+  const renderAddModal = () => {
+    if (!isModalOpen) return null;
+    return (
+      <div className="fixed inset-0 bg-slate-900/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
+        <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl relative">
+          <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+            <h3 className="text-lg font-bold text-slate-800 flex items-center"><Plus className="mr-2 text-teal-600"/> 新增自訂保養品</h3>
+            <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X size={20}/></button>
+          </div>
+          
+          <div className="p-6 space-y-4">
+            {/* Base64 圖片上傳區 */}
+            <div className="flex justify-center mb-6">
+              <label className="w-32 h-32 rounded-2xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center cursor-pointer hover:border-teal-400 hover:bg-teal-50 transition overflow-hidden group relative">
+                {newProduct.imageBase64 ? (
+                  <>
+                    <img src={newProduct.imageBase64} alt="Preview" className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition">
+                      <span className="text-white text-xs font-medium">更換圖片</span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <Upload className="text-slate-400 mb-2 group-hover:text-teal-500" size={24} />
+                    <span className="text-xs text-slate-500 group-hover:text-teal-600">上傳圖片</span>
+                  </>
+                )}
+                <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+              </label>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-500">品牌</label>
+                <input type="text" value={newProduct.brand} onChange={e=>setNewProduct({...newProduct, brand: e.target.value})} className="w-full p-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-teal-500" placeholder="e.g. SK-II" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-500">功能分類</label>
+                <select value={newProduct.function} onChange={e=>setNewProduct({...newProduct, function: e.target.value})} className="w-full p-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-teal-500">
+                  {categories.filter(c => c !== '全部').map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                </select>
+              </div>
+            </div>
+            
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-500">產品名稱</label>
+              <input type="text" value={newProduct.name} onChange={e=>setNewProduct({...newProduct, name: e.target.value})} className="w-full p-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-teal-500" placeholder="e.g. 青春露" />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-500">價格 (NT$)</label>
+              <input type="number" value={newProduct.price} onChange={e=>setNewProduct({...newProduct, price: e.target.value})} className="w-full p-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-teal-500" placeholder="0" />
+            </div>
+          </div>
+
+          <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end">
+            <button onClick={handleSaveProduct} className="bg-teal-600 text-white px-6 py-2 rounded-lg font-medium shadow-md hover:bg-teal-700 transition">
+              儲存至雲端
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-50 font-sans flex flex-col md:flex-row">
+      <aside className="w-full md:w-64 bg-white border-r border-slate-100 p-6 flex flex-col z-10 shadow-[1px_0_10px_rgba(0,0,0,0.02)]">
+        <div className="flex items-center space-x-3 mb-10 mt-2">
+          <div className="w-10 h-10 bg-teal-600 rounded-lg flex items-center justify-center text-white shadow-md shadow-teal-200">
+            <Sparkles size={24} />
+          </div>
+          <div>
+            <h1 className="text-lg font-bold text-slate-800 leading-tight">DermaTrack</h1>
+            <p className="text-xs text-teal-600 font-medium tracking-widest">醫美級保養管家</p>
+          </div>
+        </div>
+
+        <nav className="flex-1 space-y-2">
+          {[
+            { id: 'dashboard', icon: LayoutDashboard, label: '總覽 Dashboard' },
+            { id: 'catalog', icon: BookOpen, label: '產品庫 Catalog' },
+            { id: 'stash', icon: Package, label: '化妝台 My Stash' }
+          ].map(item => (
+            <button
+              key={item.id}
+              onClick={() => setActiveTab(item.id)}
+              className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-300 text-sm font-medium ${
+                activeTab === item.id ? 'bg-teal-50 text-teal-700 shadow-sm border border-teal-100' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'
+              }`}
+            >
+              <item.icon size={18} className={activeTab === item.id ? 'text-teal-600' : 'text-slate-400'} />
+              <span>{item.label}</span>
+            </button>
+          ))}
+        </nav>
+
+        <div className="mt-auto pt-6 border-t border-slate-100 flex flex-col space-y-4">
+          <div className="flex items-center space-x-3 px-2">
+            {user.photoURL ? (
+              <img src={user.photoURL} alt="Avatar" className="w-10 h-10 rounded-full border border-slate-200 shadow-sm" />
+            ) : (
+              <div className="w-10 h-10 bg-slate-200 rounded-full flex items-center justify-center text-slate-500">
+                <UserCircle size={24} />
+              </div>
+            )}
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-slate-700 truncate">
+                {user.isAnonymous ? '訪客使用者' : user.displayName}
+              </p>
+              <p className="text-xs text-teal-600 font-medium">雲端同步中</p>
+            </div>
+          </div>
+          <button onClick={handleLogout} className="flex items-center justify-center space-x-2 w-full py-2 text-sm text-slate-500 hover:bg-rose-50 hover:text-rose-600 rounded-lg transition">
+            <LogOut size={16} /> <span>登出帳號</span>
+          </button>
+        </div>
+      </aside>
+
+      <main className="flex-1 p-6 md:p-10 lg:px-16 lg:py-10 h-screen overflow-y-auto">
+        <div className="max-w-6xl mx-auto">
+          {activeTab === 'dashboard' && renderDashboard()}
+          {activeTab === 'catalog' && renderCatalog()}
+          {activeTab === 'stash' && renderStash()}
+        </div>
+        {renderAddModal()}
+      </main>
+    </div>
+  );
+}
