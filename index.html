@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from 'firebase/auth';
+import { getAuth, signInWithCustomToken, signInAnonymously, signOut, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, collection, onSnapshot, addDoc, deleteDoc, doc } from 'firebase/firestore';
 import { 
   Beaker, Droplets, Sparkles, Shield, Sun, Moon, Activity, 
@@ -8,19 +8,22 @@ import {
   ClipboardList, Heart, LogOut, Image as ImageIcon, X
 } from 'lucide-react';
 
-// --- Firebase 初始化 ---
-const firebaseConfig = {
-  apiKey: "AIzaSyBvHTkZkdPdT99B9EM5uStPOFALd2d0miw",
-  authDomain: "face-cdcf6.firebaseapp.com",
-  projectId: "face-cdcf6",
-  storageBucket: "face-cdcf6.firebasestorage.app",
-  messagingSenderId: "91272584568",
-  appId: "1:91272584568:web:d97f732af144e5b546bc8d"
-};
+// --- 1. 初始化 Firebase (完全遵守系統環境安全規則) ---
+const firebaseConfig = typeof __firebase_config !== 'undefined' 
+  ? JSON.parse(__firebase_config) 
+  : {
+      apiKey: "AIzaSyBvHTkZkdPdT99B9EM5uStPOFALd2d0miw",
+      authDomain: "face-cdcf6.firebaseapp.com",
+      projectId: "face-cdcf6",
+      storageBucket: "face-cdcf6.firebasestorage.app",
+      messagingSenderId: "91272584568",
+      appId: "1:91272584568:web:d97f732af144e5b546bc8d"
+    };
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
 // --- 靜態設定 ---
 const categories = ['全部', '角質調理', '美白淡斑', '保濕舒緩', '抗老更新', '控油保濕'];
@@ -49,21 +52,40 @@ export default function App() {
     name: '', brand: '', category: '保濕舒緩', price: '', status: 'in-use', imageBase64: ''
   });
 
-  // --- 認證與資料監聽 ---
+  // --- 2. 認證機制 (強制使用 Token 或匿名登入以符合 iframe 規範) ---
   useEffect(() => {
+    const initAuth = async () => {
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+      } catch (error) {
+        console.error("Auth init error:", error);
+      }
+    };
+    
+    initAuth();
+
     const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       setAuthLoading(false);
     });
+    
     return () => unsubscribeAuth();
   }, []);
 
+  // --- 3. 資料監聽 (嚴格遵守路徑規範) ---
   useEffect(() => {
     if (!user) {
       setProducts([]);
       return;
     }
-    const q = collection(db, `users/${user.uid}/products`);
+    
+    // 路徑必須符合平台規範：artifacts/{appId}/users/{userId}/products
+    const q = collection(db, 'artifacts', appId, 'users', user.uid, 'products');
+    
     const unsubscribeDb = onSnapshot(q, (snapshot) => {
       const productData = [];
       snapshot.forEach((doc) => productData.push({ id: doc.id, ...doc.data() }));
@@ -76,10 +98,9 @@ export default function App() {
   }, [user]);
 
   // --- 操作函數 ---
-  const handleLogin = () => signInWithPopup(auth, new GoogleAuthProvider());
   const handleLogout = () => signOut(auth);
 
-  // 升級：圖片自動壓縮功能 (避免 Base64 超過 Firestore 1MB 限制)
+  // 圖片自動壓縮功能 (確保 Base64 安全且不超過大小)
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -94,7 +115,6 @@ export default function App() {
         let width = img.width;
         let height = img.height;
 
-        // 計算等比例縮放
         if (width > height) {
           if (width > MAX_WIDTH) {
             height *= MAX_WIDTH / width;
@@ -112,7 +132,6 @@ export default function App() {
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, width, height);
         
-        // 壓縮成 JPEG 格式，品質 0.7
         const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
         setNewProduct(prev => ({ ...prev, imageBase64: compressedBase64 }));
       };
@@ -126,7 +145,7 @@ export default function App() {
     if (!user || !newProduct.name || !newProduct.brand) return;
     
     try {
-      await addDoc(collection(db, `users/${user.uid}/products`), {
+      await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'products'), {
         ...newProduct,
         price: Number(newProduct.price) || 0,
         createdAt: new Date().toISOString()
@@ -140,36 +159,16 @@ export default function App() {
 
   const handleDeleteProduct = async (id) => {
     if (window.confirm('確定要刪除這項保養品嗎？')) {
-      await deleteDoc(doc(db, `users/${user.uid}/products`, id));
+      await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'products', id));
     }
   };
 
   const totalValue = products.filter(p => p.status !== 'wishlist').reduce((acc, curr) => acc + curr.price, 0);
   const inUseCount = products.filter(p => p.status === 'in-use').length;
 
+  // --- UI 元件載入中狀態 ---
   if (authLoading) {
-    return <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-500">載入中...</div>;
-  }
-
-  if (!user) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-        <div className="bg-white p-10 rounded-3xl shadow-lg border border-slate-100 max-w-md w-full text-center animate-fade-in">
-          <div className="w-20 h-20 bg-cyan-600 rounded-2xl flex items-center justify-center text-white font-bold text-3xl shadow-md mx-auto mb-6">
-            DV
-          </div>
-          <h1 className="text-2xl font-bold text-slate-800 mb-2">DermaVault 專業肌膚管理</h1>
-          <p className="text-slate-500 mb-8">登入以建立您專屬的數位醫美保養庫存，精準管理您的肌膚資產。</p>
-          <button 
-            onClick={handleLogin}
-            className="w-full flex items-center justify-center space-x-3 bg-white border border-slate-200 text-slate-700 px-6 py-3 rounded-xl hover:bg-slate-50 transition-all font-medium shadow-sm"
-          >
-            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-5 h-5"/>
-            <span>使用 Google 帳號登入</span>
-          </button>
-        </div>
-      </div>
-    );
+    return <div className="min-h-screen flex items-center justify-center bg-slate-50 text-cyan-600 font-medium">系統安全連線中...</div>;
   }
 
   const SidebarItem = ({ icon: Icon, label, tab }) => (
