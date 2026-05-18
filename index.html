@@ -25,7 +25,7 @@ const db = getFirestore(app);
 // --- 靜態設定 ---
 const categories = ['全部', '角質調理', '美白淡斑', '保濕舒緩', '抗老更新', '控油保濕'];
 
-// 分類對應的視覺配置 (用來當作沒有上傳圖片時的預設圖示)
+// 分類對應的視覺配置
 const categoryConfig = {
   '角質調理': { icon: Beaker, color: 'text-cyan-600', bg: 'bg-cyan-50' },
   '美白淡斑': { icon: Sparkles, color: 'text-amber-500', bg: 'bg-amber-50' },
@@ -63,7 +63,6 @@ export default function App() {
       setProducts([]);
       return;
     }
-    // 監聽專屬用戶的 Firestore 產品資料
     const q = collection(db, `users/${user.uid}/products`);
     const unsubscribeDb = onSnapshot(q, (snapshot) => {
       const productData = [];
@@ -80,16 +79,46 @@ export default function App() {
   const handleLogin = () => signInWithPopup(auth, new GoogleAuthProvider());
   const handleLogout = () => signOut(auth);
 
+  // 升級：圖片自動壓縮功能 (避免 Base64 超過 Firestore 1MB 限制)
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
-    if (file) {
-      // 轉換為 Base64 (注意：Firestore 單一文件限制 1MB)
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setNewProduct({ ...newProduct, imageBase64: reader.result });
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_WIDTH = 600;
+        const MAX_HEIGHT = 600;
+        let width = img.width;
+        let height = img.height;
+
+        // 計算等比例縮放
+        if (width > height) {
+          if (width > MAX_WIDTH) {
+            height *= MAX_WIDTH / width;
+            width = MAX_WIDTH;
+          }
+        } else {
+          if (height > MAX_HEIGHT) {
+            width *= MAX_HEIGHT / height;
+            height = MAX_HEIGHT;
+          }
+        }
+        
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        
+        // 壓縮成 JPEG 格式，品質 0.7
+        const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
+        setNewProduct(prev => ({ ...prev, imageBase64: compressedBase64 }));
       };
-      reader.readAsDataURL(file);
-    }
+      img.src = event.target.result;
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleAddProduct = async (e) => {
@@ -115,16 +144,13 @@ export default function App() {
     }
   };
 
-  // --- 衍生數據 ---
   const totalValue = products.filter(p => p.status !== 'wishlist').reduce((acc, curr) => acc + curr.price, 0);
   const inUseCount = products.filter(p => p.status === 'in-use').length;
 
-  // --- UI 元件 ---
   if (authLoading) {
     return <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-500">載入中...</div>;
   }
 
-  // 登入畫面
   if (!user) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
@@ -178,9 +204,7 @@ export default function App() {
     );
   };
 
-  // --- 模態視窗 (新增保養品) ---
   const AddProductModal = () => {
-    // 預先解構變數，避免預覽器解析物件屬性失敗
     const { imageBase64, brand, name, category, status, price } = newProduct;
 
     return (
@@ -193,7 +217,6 @@ export default function App() {
           <div className="p-6 overflow-y-auto">
             <form onSubmit={handleAddProduct} className="space-y-4">
               
-              {/* 圖片上傳區塊 (Base64) */}
               <div className="flex justify-center mb-6">
                 <label className="relative cursor-pointer group">
                   <div className="w-24 h-24 rounded-2xl bg-slate-50 border-2 border-dashed border-slate-200 flex flex-col items-center justify-center overflow-hidden group-hover:border-cyan-400 transition-colors">
@@ -255,7 +278,6 @@ export default function App() {
     );
   };
 
-  // --- 視圖元件 ---
   const DashboardView = () => (
     <div className="space-y-6 animate-fade-in">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -322,7 +344,6 @@ export default function App() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredProducts.map(product => {
-              // 預先解構變數
               const { id, category, imageBase64, status, brand, name, price } = product;
               const catConf = categoryConfig[category] || categoryConfig['全部'];
               const Icon = catConf.icon;
@@ -383,7 +404,6 @@ export default function App() {
     </div>
   );
 
-  // 安全地處理頭像網址與使用者名稱
   const avatarUrl = user?.photoURL || "";
   const userName = user?.displayName || "使用者";
   const userInitial = userName.charAt(0);
