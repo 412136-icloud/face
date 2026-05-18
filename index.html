@@ -1,17 +1,212 @@
-import React, { useState, useEffect } from 'react';
-import { initializeApp } from 'firebase/app';
-import { getAuth, signInWithCustomToken, signInAnonymously, signOut, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, collection, onSnapshot, addDoc, deleteDoc, doc } from 'firebase/firestore';
-import { 
-  Beaker, Droplets, Sparkles, Shield, Sun, Moon, Activity, 
-  Plus, Search, Calendar, ChevronRight, Stethoscope, Box, 
-  ClipboardList, Heart, LogOut, Image as ImageIcon, X
-} from 'lucide-react';
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DermaVault 專業肌膚管理系統</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Custom Fonts & Styles -->
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght=300;400;500;700;900&display=swap');
+    body {
+      font-family: 'Noto Sans TC', sans-serif;
+    }
+    .hide-scrollbar::-webkit-scrollbar { display: none; }
+    .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen">
 
-// --- 1. 初始化 Firebase (完全遵守系統環境安全規則) ---
-const firebaseConfig = typeof __firebase_config !== 'undefined' 
-  ? JSON.parse(__firebase_config) 
-  : {
+  <!-- ==================== 1. 登入畫面 ==================== -->
+  <div id="login-view" class="min-h-screen flex items-center justify-center p-4 hidden">
+    <div class="bg-white p-8 md:p-10 rounded-3xl shadow-lg border border-slate-100 max-w-md w-full text-center animate-fade-in">
+      <div class="w-20 h-20 bg-cyan-600 rounded-2xl flex items-center justify-center text-white font-bold text-3xl shadow-md mx-auto mb-6">
+        DV
+      </div>
+      <h1 class="text-2xl font-bold text-slate-800 mb-2">DermaVault 專業肌膚管理</h1>
+      <p class="text-slate-500 mb-8 text-sm leading-relaxed">登入以建立您專屬的數位醫美保養庫存，精準管理您的肌膚資產。</p>
+      <button id="btn-login" class="w-full flex items-center justify-center space-x-3 bg-white border border-slate-200 text-slate-700 px-6 py-3 rounded-xl hover:bg-slate-50 transition-all font-medium shadow-sm hover:shadow">
+        <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" class="w-5 h-5"/>
+        <span>使用 Google 帳號登入</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ==================== 2. 主載入狀態 ==================== -->
+  <div id="loading-view" class="min-h-screen flex flex-col items-center justify-center bg-slate-50">
+    <div class="w-12 h-12 border-4 border-cyan-200 border-t-cyan-600 rounded-full animate-spin mb-4"></div>
+    <p class="text-cyan-800 font-medium text-sm">系統安全防護連線中...</p>
+  </div>
+
+  <!-- ==================== 3. 主應用介面 ==================== -->
+  <div id="app-view" class="min-h-screen flex flex-col md:flex-row hidden">
+    
+    <!-- 側邊欄 (Sidebar) -->
+    <aside class="w-full md:w-64 bg-white border-r border-slate-100 flex-shrink-0 flex flex-col z-10 sticky top-0 md:h-screen shadow-sm md:shadow-none">
+      <div class="p-6 flex items-center space-x-3">
+        <div class="w-10 h-10 bg-cyan-600 rounded-xl flex items-center justify-center text-white font-bold text-xl shadow-md">
+          DV
+        </div>
+        <div>
+          <h1 class="font-bold text-xl tracking-tight text-slate-800">DermaVault</h1>
+          <p class="text-xs text-cyan-600 tracking-widest font-medium uppercase mt-0.5">Professional</p>
+        </div>
+      </div>
+      
+      <!-- 功能導覽選單 -->
+      <nav class="flex-1 px-4 pb-4 md:pb-6 space-y-2 flex flex-row md:flex-col overflow-x-auto md:overflow-visible hide-scrollbar">
+        <button onclick="switchTab('dashboard')" id="nav-dashboard" class="nav-item w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 bg-cyan-50 text-cyan-700 font-semibold shadow-sm">
+          <i data-lucide="activity" class="text-cyan-600"></i>
+          <span class="whitespace-nowrap">數據儀表板</span>
+        </button>
+        <button onclick="switchTab('inventory')" id="nav-inventory" class="nav-item w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 text-slate-500 hover:bg-slate-50 hover:text-cyan-600">
+          <i data-lucide="box" class="text-slate-400"></i>
+          <span class="whitespace-nowrap">保養品庫存</span>
+        </button>
+        <button onclick="switchTab('routine')" id="nav-routine" class="nav-item w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 text-slate-500 hover:bg-slate-50 hover:text-cyan-600">
+          <i data-lucide="clipboard-list" class="text-slate-400"></i>
+          <span class="whitespace-nowrap">早晚處方箋</span>
+        </button>
+      </nav>
+
+      <!-- 用戶大頭貼與登出 -->
+      <div class="hidden md:block p-6 border-t border-slate-50">
+        <div class="bg-slate-50 rounded-xl p-4 flex items-center justify-between">
+          <div class="flex items-center space-x-3 overflow-hidden">
+            <div id="user-avatar-container">
+              <!-- JS 動態生成大頭貼或預設 -->
+            </div>
+            <div class="truncate">
+              <p id="user-name-display" class="text-sm font-bold text-slate-800 truncate">載入中</p>
+              <p class="text-xs text-slate-500 truncate">線上管理員</p>
+            </div>
+          </div>
+          <button id="btn-logout" class="text-slate-400 hover:text-red-500 p-1 transition-colors">
+            <i data-lucide="log-out" class="w-5 h-5"></i>
+          </button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- 主區塊 (Main) -->
+    <main class="flex-1 p-6 md:p-10 overflow-y-auto">
+      <header class="mb-8">
+        <h2 id="view-title" class="text-2xl md:text-3xl font-bold text-slate-800 mb-1">數據總覽</h2>
+        <p id="view-desc" class="text-slate-500 text-sm">精準掌控您的肌膚投資與健康狀態。</p>
+      </header>
+
+      <!-- 頁面容器 -->
+      <div id="view-content" class="animate-fade-in">
+        <!-- JS 動態渲染各視圖 -->
+      </div>
+    </main>
+  </div>
+
+  <!-- ==================== 4. 新增產品彈出視窗 ==================== -->
+  <div id="modal-container" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden animate-fade-in">
+    <div class="bg-white rounded-3xl w-full max-w-lg shadow-xl overflow-hidden flex flex-col max-h-[90vh]">
+      <div class="p-6 border-b border-slate-100 flex justify-between items-center">
+        <h3 class="text-xl font-bold text-slate-800">新增保養資產</h3>
+        <button onclick="toggleModal(false)" class="text-slate-400 hover:text-slate-600 transition-colors">
+          <i data-lucide="x" class="w-6 h-6"></i>
+        </button>
+      </div>
+      <div class="p-6 overflow-y-auto">
+        <form id="form-add-product" class="space-y-4">
+          <!-- 圖片上傳 (附 Base64 壓縮技術) -->
+          <div class="flex flex-col items-center mb-6">
+            <label class="relative cursor-pointer group">
+              <div id="image-preview-box" class="w-24 h-24 rounded-2xl bg-slate-50 border-2 border-dashed border-slate-200 flex flex-col items-center justify-center overflow-hidden group-hover:border-cyan-400 transition-colors">
+                <i data-lucide="image" class="text-slate-400 mb-1 w-6 h-6"></i>
+                <span class="text-xs text-slate-400">上傳實拍</span>
+              </div>
+              <input type="file" id="input-image" accept="image/*" class="hidden" />
+            </label>
+            <p class="text-xs text-slate-400 mt-2">系統將自動優化與壓縮相片，確保極速儲存</p>
+          </div>
+
+          <div class="grid grid-cols-2 gap-4">
+            <div class="space-y-1">
+              <label class="text-sm font-medium text-slate-600">品牌 (Brand)</label>
+              <input required id="input-brand" type="text" class="w-full p-3 rounded-xl border border-slate-200 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500" placeholder="如: Paula's Choice"/>
+            </div>
+            <div class="space-y-1">
+              <label class="text-sm font-medium text-slate-600">產品名稱</label>
+              <input required id="input-name" type="text" class="w-full p-3 rounded-xl border border-slate-200 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500" placeholder="如: 2%水楊酸精華液"/>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-4">
+            <div class="space-y-1">
+              <label class="text-sm font-medium text-slate-600">主要功效</label>
+              <select id="input-category" class="w-full p-3 rounded-xl border border-slate-200 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500">
+                <option value="角質調理">角質調理</option>
+                <option value="美白淡斑">美白淡斑</option>
+                <option value="保濕舒緩" selected>保濕舒緩</option>
+                <option value="抗老更新">抗老更新</option>
+                <option value="控油保濕">控油保濕</option>
+              </select>
+            </div>
+            <div class="space-y-1">
+              <label class="text-sm font-medium text-slate-600">目前狀態</label>
+              <select id="input-status" class="w-full p-3 rounded-xl border border-slate-200 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500">
+                <option value="in-use">服役中</option>
+                <option value="unopened">庫存/未開封</option>
+                <option value="wishlist">願望清單</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="space-y-1">
+            <label class="text-sm font-medium text-slate-600">購入價格 (NT$)</label>
+            <input type="number" min="0" id="input-price" class="w-full p-3 rounded-xl border border-slate-200 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500" placeholder="0"/>
+          </div>
+
+          <div class="pt-4">
+            <button type="submit" class="w-full bg-cyan-600 text-white font-bold py-3 rounded-xl hover:bg-cyan-700 transition-colors shadow-sm">
+              建檔存入系統
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== 5. 自製高質感對話框 & 提示框 ==================== -->
+  <div id="toast" class="fixed bottom-6 right-6 bg-slate-900 text-white px-5 py-3 rounded-2xl shadow-lg z-50 transform translate-y-20 opacity-0 transition-all duration-300 flex items-center space-x-2">
+    <i data-lucide="check-circle" class="text-emerald-400 w-5 h-5"></i>
+    <span id="toast-text" class="text-sm font-medium">提示訊息</span>
+  </div>
+
+  <div id="confirm-dialog" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white p-6 rounded-2xl max-w-sm w-full shadow-xl text-center animate-fade-in">
+      <i data-lucide="alert-triangle" class="text-rose-500 w-12 h-12 mx-auto mb-4"></i>
+      <h4 class="text-lg font-bold text-slate-800 mb-2">確定要刪除嗎？</h4>
+      <p class="text-slate-500 text-sm mb-6">此動作將永久移除此保養品記錄且無法復原。</p>
+      <div class="flex space-x-3">
+        <button id="confirm-cancel" class="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 rounded-xl text-slate-700 font-semibold text-sm transition-colors">取消</button>
+        <button id="confirm-ok" class="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 rounded-xl text-white font-semibold text-sm transition-colors">刪除</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ==================== 6. Firebase & 系統邏輯模組 ==================== -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.1/firebase-app.js";
+    import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.1/firebase-auth.js";
+    import { getFirestore, collection, doc, addDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.1/firebase-firestore.js";
+
+    // --- 連線資訊 ---
+    const firebaseConfig = {
       apiKey: "AIzaSyBvHTkZkdPdT99B9EM5uStPOFALd2d0miw",
       authDomain: "face-cdcf6.firebaseapp.com",
       projectId: "face-cdcf6",
@@ -20,468 +215,432 @@ const firebaseConfig = typeof __firebase_config !== 'undefined'
       appId: "1:91272584568:web:d97f732af144e5b546bc8d"
     };
 
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
-// --- 靜態設定 ---
-const categories = ['全部', '角質調理', '美白淡斑', '保濕舒緩', '抗老更新', '控油保濕'];
+    // --- 應用程式狀態 ---
+    let currentUser = null;
+    let products = [];
+    let activeTab = 'dashboard';
+    let currentFilter = '全部';
+    let tempImageBase64 = '';
 
-// 分類對應的視覺配置
-const categoryConfig = {
-  '角質調理': { icon: Beaker, color: 'text-cyan-600', bg: 'bg-cyan-50' },
-  '美白淡斑': { icon: Sparkles, color: 'text-amber-500', bg: 'bg-amber-50' },
-  '保濕舒緩': { icon: Droplets, color: 'text-blue-500', bg: 'bg-blue-50' },
-  '抗老更新': { icon: Activity, color: 'text-purple-600', bg: 'bg-purple-50' },
-  '控油保濕': { icon: Shield, color: 'text-emerald-500', bg: 'bg-emerald-50' },
-  '全部': { icon: Box, color: 'text-slate-600', bg: 'bg-slate-50' }
-};
+    // 分類配置對應的視覺風格
+    const categoryConfig = {
+      '角質調理': { icon: 'beaker', color: 'text-cyan-600', bg: 'bg-cyan-50' },
+      '美白淡斑': { icon: 'sparkles', color: 'text-amber-500', bg: 'bg-amber-50' },
+      '保濕舒緩': { icon: 'droplets', color: 'text-blue-500', bg: 'bg-blue-50' },
+      '抗老更新': { icon: 'activity', color: 'text-purple-600', bg: 'bg-purple-50' },
+      '控油保濕': { icon: 'shield', color: 'text-emerald-500', bg: 'bg-emerald-50' },
+      '全部': { icon: 'box', color: 'text-slate-600', bg: 'bg-slate-50' }
+    };
 
-export default function App() {
-  // --- 狀態管理 ---
-  const [user, setUser] = useState(null);
-  const [authLoading, setAuthLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('dashboard');
-  const [products, setProducts] = useState([]);
-  const [filter, setFilter] = useState('全部');
-  const [isAddingMode, setIsAddingMode] = useState(false);
-
-  // 新增產品的表單狀態
-  const [newProduct, setNewProduct] = useState({
-    name: '', brand: '', category: '保濕舒緩', price: '', status: 'in-use', imageBase64: ''
-  });
-
-  // --- 2. 認證機制 (強制使用 Token 或匿名登入以符合 iframe 規範) ---
-  useEffect(() => {
-    const initAuth = async () => {
-      try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
-        }
-      } catch (error) {
-        console.error("Auth init error:", error);
+    // --- 生命週期與認證監聽 ---
+    onAuthStateChanged(auth, (user) => {
+      document.getElementById('loading-view').classList.add('hidden');
+      if (user) {
+        currentUser = user;
+        document.getElementById('login-view').classList.add('hidden');
+        document.getElementById('app-view').classList.remove('hidden');
+        setupUserUI();
+        startDataListener();
+      } else {
+        currentUser = null;
+        document.getElementById('app-view').classList.add('hidden');
+        document.getElementById('login-view').classList.remove('hidden');
       }
-    };
-    
-    initAuth();
-
-    const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-      setAuthLoading(false);
-    });
-    
-    return () => unsubscribeAuth();
-  }, []);
-
-  // --- 3. 資料監聽 (嚴格遵守路徑規範) ---
-  useEffect(() => {
-    if (!user) {
-      setProducts([]);
-      return;
-    }
-    
-    // 路徑必須符合平台規範：artifacts/{appId}/users/{userId}/products
-    const q = collection(db, 'artifacts', appId, 'users', user.uid, 'products');
-    
-    const unsubscribeDb = onSnapshot(q, (snapshot) => {
-      const productData = [];
-      snapshot.forEach((doc) => productData.push({ id: doc.id, ...doc.data() }));
-      setProducts(productData);
-    }, (error) => {
-      console.error("Firestore error:", error);
     });
 
-    return () => unsubscribeDb();
-  }, [user]);
+    // --- 綁定功能事件 ---
+    document.getElementById('btn-login').addEventListener('click', async () => {
+      const provider = new GoogleAuthProvider();
+      try {
+        await signInWithPopup(auth, provider);
+        showToast('Google 登入成功');
+      } catch (error) {
+        console.error("登入失敗:", error);
+        showToast('登入失敗，請確認您的帳號權限或再次嘗試');
+      }
+    });
 
-  // --- 操作函數 ---
-  const handleLogout = () => signOut(auth);
+    document.getElementById('btn-logout').addEventListener('click', () => {
+      signOut(auth).then(() => showToast('已成功登出系統'));
+    });
 
-  // 圖片自動壓縮功能 (確保 Base64 安全且不超過大小)
-  const handleImageUpload = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const MAX_WIDTH = 600;
-        const MAX_HEIGHT = 600;
-        let width = img.width;
-        let height = img.height;
-
-        if (width > height) {
-          if (width > MAX_WIDTH) {
-            height *= MAX_WIDTH / width;
-            width = MAX_WIDTH;
-          }
-        } else {
-          if (height > MAX_HEIGHT) {
-            width *= MAX_HEIGHT / height;
-            height = MAX_HEIGHT;
-          }
-        }
-        
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, width, height);
-        
-        const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
-        setNewProduct(prev => ({ ...prev, imageBase64: compressedBase64 }));
-      };
-      img.src = event.target.result;
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const handleAddProduct = async (e) => {
-    e.preventDefault();
-    if (!user || !newProduct.name || !newProduct.brand) return;
-    
-    try {
-      await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'products'), {
-        ...newProduct,
-        price: Number(newProduct.price) || 0,
-        createdAt: new Date().toISOString()
-      });
-      setIsAddingMode(false);
-      setNewProduct({ name: '', brand: '', category: '保濕舒緩', price: '', status: 'in-use', imageBase64: '' });
-    } catch (error) {
-      console.error("Error adding product:", error);
-    }
-  };
-
-  const handleDeleteProduct = async (id) => {
-    if (window.confirm('確定要刪除這項保養品嗎？')) {
-      await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'products', id));
-    }
-  };
-
-  const totalValue = products.filter(p => p.status !== 'wishlist').reduce((acc, curr) => acc + curr.price, 0);
-  const inUseCount = products.filter(p => p.status === 'in-use').length;
-
-  // --- UI 元件載入中狀態 ---
-  if (authLoading) {
-    return <div className="min-h-screen flex items-center justify-center bg-slate-50 text-cyan-600 font-medium">系統安全連線中...</div>;
-  }
-
-  const SidebarItem = ({ icon: Icon, label, tab }) => (
-    <button 
-      onClick={() => setActiveTab(tab)}
-      className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 ${
-        activeTab === tab 
-          ? 'bg-cyan-50 text-cyan-700 font-semibold shadow-sm' 
-          : 'text-slate-500 hover:bg-slate-50 hover:text-cyan-600'
-      }`}
-    >
-      <Icon size={20} className={activeTab === tab ? 'text-cyan-600' : 'text-slate-400'} />
-      <span>{label}</span>
-    </button>
-  );
-
-  const StatusBadge = ({ status }) => {
-    const styles = {
-      'in-use': 'bg-emerald-50 text-emerald-600 border-emerald-200',
-      'unopened': 'bg-blue-50 text-blue-600 border-blue-200',
-      'wishlist': 'bg-purple-50 text-purple-600 border-purple-200',
-    };
-    const labels = {
-      'in-use': '服役中',
-      'unopened': '庫存未開',
-      'wishlist': '願望清單',
-    };
-    return (
-      <span className={`px-2.5 py-1 rounded-full text-xs font-medium border ${styles[status]}`}>
-        {labels[status]}
-      </span>
-    );
-  };
-
-  const AddProductModal = () => {
-    const { imageBase64, brand, name, category, status, price } = newProduct;
-
-    return (
-      <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
-        <div className="bg-white rounded-3xl w-full max-w-lg shadow-xl overflow-hidden flex flex-col max-h-[90vh]">
-          <div className="p-6 border-b border-slate-100 flex justify-between items-center">
-            <h3 className="text-xl font-bold text-slate-800">新增保養資產</h3>
-            <button onClick={() => setIsAddingMode(false)} className="text-slate-400 hover:text-slate-600"><X size={24}/></button>
-          </div>
-          <div className="p-6 overflow-y-auto">
-            <form onSubmit={handleAddProduct} className="space-y-4">
-              
-              <div className="flex justify-center mb-6">
-                <label className="relative cursor-pointer group">
-                  <div className="w-24 h-24 rounded-2xl bg-slate-50 border-2 border-dashed border-slate-200 flex flex-col items-center justify-center overflow-hidden group-hover:border-cyan-400 transition-colors">
-                    {imageBase64 ? (
-                      <img src={imageBase64} alt="Preview" className="w-full h-full object-cover" />
-                    ) : (
-                      <>
-                        <ImageIcon className="text-slate-400 mb-1" size={24} />
-                        <span className="text-xs text-slate-400">上傳實拍</span>
-                      </>
-                    )}
-                  </div>
-                  <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
-                </label>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-sm font-medium text-slate-600">品牌 (Brand)</label>
-                  <input required type="text" value={brand} onChange={e => setNewProduct({...newProduct, brand: e.target.value})} className="w-full p-3 rounded-xl border border-slate-200 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500" placeholder="如: Kiehl's"/>
-                </div>
-                <div className="space-y-1">
-                  <label className="text-sm font-medium text-slate-600">名稱 (Product Name)</label>
-                  <input required type="text" value={name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} className="w-full p-3 rounded-xl border border-slate-200 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500" placeholder="如: 金盞花化妝水"/>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-sm font-medium text-slate-600">主要功效</label>
-                  <select value={category} onChange={e => setNewProduct({...newProduct, category: e.target.value})} className="w-full p-3 rounded-xl border border-slate-200 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500">
-                    {categories.filter(c => c !== '全部').map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                  </select>
-                </div>
-                <div className="space-y-1">
-                  <label className="text-sm font-medium text-slate-600">狀態</label>
-                  <select value={status} onChange={e => setNewProduct({...newProduct, status: e.target.value})} className="w-full p-3 rounded-xl border border-slate-200 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500">
-                    <option value="in-use">服役中</option>
-                    <option value="unopened">未開封/庫存</option>
-                    <option value="wishlist">願望清單</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-sm font-medium text-slate-600">購入價格 (NT$)</label>
-                <input type="number" min="0" value={price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} className="w-full p-3 rounded-xl border border-slate-200 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500" placeholder="0"/>
-              </div>
-
-              <div className="pt-4">
-                <button type="submit" className="w-full bg-cyan-600 text-white font-bold py-3 rounded-xl hover:bg-cyan-700 transition-colors shadow-sm">
-                  建檔存入系統
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  const DashboardView = () => (
-    <div className="space-y-6 animate-fade-in">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-          <div className="flex items-center space-x-3 mb-2">
-            <div className="p-2 bg-cyan-50 rounded-lg"><Box className="text-cyan-600" size={24}/></div>
-            <h3 className="text-slate-500 font-medium">服役中品項</h3>
-          </div>
-          <p className="text-3xl font-bold text-slate-800">{inUseCount} <span className="text-sm font-normal text-slate-500">件</span></p>
-        </div>
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-          <div className="flex items-center space-x-3 mb-2">
-            <div className="p-2 bg-emerald-50 rounded-lg"><Stethoscope className="text-emerald-600" size={24}/></div>
-            <h3 className="text-slate-500 font-medium">總資產價值</h3>
-          </div>
-          <p className="text-3xl font-bold text-slate-800">NT$ {totalValue.toLocaleString()}</p>
-        </div>
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-          <div className="flex items-center space-x-3 mb-2">
-            <div className="p-2 bg-purple-50 rounded-lg"><Heart className="text-purple-600" size={24}/></div>
-            <h3 className="text-slate-500 font-medium">收錄總數</h3>
-          </div>
-          <p className="text-3xl font-bold text-slate-800">{products.length} <span className="text-sm font-normal text-slate-500">件</span></p>
-        </div>
-      </div>
-    </div>
-  );
-
-  const InventoryView = () => {
-    const filteredProducts = filter === '全部' ? products : products.filter(p => p.category === filter);
-
-    return (
-      <div className="space-y-6 animate-fade-in">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div className="flex space-x-2 overflow-x-auto pb-2 w-full md:w-auto hide-scrollbar">
-            {categories.map(cat => (
-              <button
-                key={cat}
-                onClick={() => setFilter(cat)}
-                className={`whitespace-nowrap px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                  filter === cat 
-                    ? 'bg-slate-800 text-white' 
-                    : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
-                }`}
-              >
-                {cat}
-              </button>
-            ))}
-          </div>
-          <button 
-            onClick={() => setIsAddingMode(true)}
-            className="flex items-center space-x-2 bg-cyan-600 text-white px-4 py-2 rounded-xl hover:bg-cyan-700 transition-colors shadow-sm"
-          >
-            <Plus size={18} />
-            <span>新增保養品</span>
-          </button>
-        </div>
-
-        {filteredProducts.length === 0 ? (
-          <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-slate-200">
-            <Box className="mx-auto text-slate-300 mb-4" size={48} />
-            <p className="text-slate-500">目前沒有符合的產品記錄</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredProducts.map(product => {
-              const { id, category, imageBase64, status, brand, name, price } = product;
-              const catConf = categoryConfig[category] || categoryConfig['全部'];
-              const Icon = catConf.icon;
-              const iconColor = catConf.color;
-              const iconBg = catConf.bg;
-              
-              return (
-                <div key={id} className="bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow p-5 group relative overflow-hidden flex flex-col justify-between">
-                  <div>
-                    <div className="flex justify-between items-start mb-4">
-                      {imageBase64 ? (
-                        <div className="w-12 h-12 rounded-xl overflow-hidden shadow-sm border border-slate-100">
-                          <img src={imageBase64} alt={name} className="w-full h-full object-cover" />
-                        </div>
-                      ) : (
-                        <div className={`p-3 rounded-xl ${iconBg} transition-colors`}>
-                          <Icon className={iconColor} size={24} />
-                        </div>
-                      )}
-                      <StatusBadge status={status} />
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold text-slate-400 tracking-wider uppercase mb-1">{brand}</p>
-                      <h4 className="font-bold text-slate-800 text-lg leading-tight mb-2">{name}</h4>
-                      <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-600 inline-block mb-2">
-                        {category}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="mt-5 pt-4 border-t border-slate-50 flex justify-between items-end">
-                    <div>
-                      <p className="text-lg font-bold text-slate-800">NT$ {price}</p>
-                    </div>
-                    <button 
-                      onClick={() => handleDeleteProduct(id)}
-                      className="text-xs text-red-400 hover:text-red-600 underline"
-                    >
-                      移除
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  const RoutineView = () => (
-    <div className="space-y-6 animate-fade-in flex flex-col items-center justify-center py-10 text-center">
-      <div className="w-24 h-24 bg-purple-50 rounded-full flex items-center justify-center mb-6">
-         <ClipboardList className="text-purple-600" size={48} />
-      </div>
-      <h3 className="text-xl font-bold text-slate-800 mb-2">專屬處方箋引擎運作中</h3>
-      <p className="text-slate-500 max-w-md">系統將根據您真實的 Firestore 庫存數據，自動分析成分並產出早晚保養順序。</p>
-      <button onClick={() => setActiveTab('inventory')} className="mt-6 text-cyan-600 hover:underline">先去建立產品庫存 &rarr;</button>
-    </div>
-  );
-
-  const avatarUrl = user?.photoURL || "";
-  const userName = user?.displayName || "使用者";
-  const userInitial = userName.charAt(0);
-
-  return (
-    <div className="min-h-screen bg-slate-50 font-sans text-slate-800 flex flex-col md:flex-row">
-      {isAddingMode && <AddProductModal />}
+    // --- 用戶介面資料同步 ---
+    function setupUserUI() {
+      const avatarContainer = document.getElementById('user-avatar-container');
+      const nameDisplay = document.getElementById('user-name-display');
       
-      {/* Sidebar */}
-      <aside className="w-full md:w-64 bg-white border-r border-slate-100 flex-shrink-0 flex flex-col z-10 sticky top-0 md:h-screen shadow-sm md:shadow-none">
-        <div className="p-6 flex items-center space-x-3">
-          <div className="w-10 h-10 bg-cyan-600 rounded-xl flex items-center justify-center text-white font-bold text-xl shadow-md">
-            DV
+      nameDisplay.textContent = currentUser.displayName || "我的醫美肌";
+      
+      if (currentUser.photoURL) {
+        avatarContainer.innerHTML = `<img src="${currentUser.photoURL}" alt="User Profile" class="w-10 h-10 rounded-full shadow-sm object-cover">`;
+      } else {
+        const initial = (currentUser.displayName || "U").charAt(0);
+        avatarContainer.innerHTML = `<div class="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-500 font-bold shadow-sm">${initial}</div>`;
+      }
+    }
+
+    // --- 資料同步：監聽專屬使用者的 Firestore 資料集 ---
+    let dbUnsubscribe = null;
+    function startDataListener() {
+      if (dbUnsubscribe) dbUnsubscribe();
+      
+      // 遵循安全路徑：artifacts/{appId}/users/{userId}/products
+      const q = collection(db, 'artifacts', appId, 'users', currentUser.uid, 'products');
+      
+      dbUnsubscribe = onSnapshot(q, (snapshot) => {
+        products = [];
+        snapshot.forEach((doc) => {
+          products.push({ id: doc.id, ...doc.data() });
+        });
+        updateUI();
+      }, (error) => {
+        console.error("資料監聽失敗:", error);
+      });
+    }
+
+    // --- 圖片壓縮與 Base64 轉換 ---
+    document.getElementById('input-image').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const MAX_SIZE = 400; // 等比例縮小到適合大小
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > MAX_SIZE) {
+              height *= MAX_SIZE / width;
+              width = MAX_SIZE;
+            }
+          } else {
+            if (height > MAX_SIZE) {
+              width *= MAX_SIZE / height;
+              height = MAX_SIZE;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+
+          // 壓縮成 JPEG 0.75 品質以減少 Base64 字串大小
+          tempImageBase64 = canvas.toDataURL('image/jpeg', 0.75);
+          
+          // 更新預覽畫面
+          const previewBox = document.getElementById('image-preview-box');
+          previewBox.innerHTML = `<img src="${tempImageBase64}" alt="Preview" class="w-full h-full object-cover">`;
+        };
+        img.src = event.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+
+    // --- 新增產品表單提交 ---
+    document.getElementById('form-add-product').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!currentUser) return;
+
+      const brand = document.getElementById('input-brand').value;
+      const name = document.getElementById('input-name').value;
+      const category = document.getElementById('input-category').value;
+      const status = document.getElementById('input-status').value;
+      const price = Number(document.getElementById('input-price').value) || 0;
+
+      try {
+        await addDoc(collection(db, 'artifacts', appId, 'users', currentUser.uid, 'products'), {
+          brand,
+          name,
+          category,
+          status,
+          price,
+          imageBase64: tempImageBase64,
+          createdAt: new Date().toISOString()
+        });
+
+        // 重設表單與狀態
+        document.getElementById('form-add-product').reset();
+        tempImageBase64 = '';
+        document.getElementById('image-preview-box').innerHTML = `
+          <i data-lucide="image" class="text-slate-400 mb-1 w-6 h-6"></i>
+          <span class="text-xs text-slate-400">上傳實拍</span>
+        `;
+        toggleModal(false);
+        showToast('保養產品已成功登錄');
+      } catch (err) {
+        console.error("登錄產品失敗:", err);
+        showToast('登錄產品失敗，請再試一次');
+      }
+    });
+
+    // --- 自訂彈出刪除確認對話框 ---
+    window.requestDelete = function(id) {
+      const dialog = document.getElementById('confirm-dialog');
+      dialog.classList.remove('hidden');
+      
+      const btnOk = document.getElementById('confirm-ok');
+      const btnCancel = document.getElementById('confirm-cancel');
+
+      // 重新綁定刪除確認事件
+      const onConfirm = async () => {
+        try {
+          await deleteDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'products', id));
+          showToast('保養資產已安全移除');
+        } catch (e) {
+          console.error(e);
+        } finally {
+          dialog.classList.add('hidden');
+          btnOk.removeEventListener('click', onConfirm);
+        }
+      };
+
+      const onCancel = () => {
+        dialog.classList.add('hidden');
+        btnOk.removeEventListener('click', onConfirm);
+      };
+
+      btnOk.addEventListener('click', onConfirm);
+      btnCancel.onclick = onCancel;
+    };
+
+    // --- 分頁切換與 UI 重新繪製 ---
+    window.switchTab = function(tab) {
+      activeTab = tab;
+      
+      // 更新導覽列高亮狀態
+      document.querySelectorAll('.nav-item').forEach(item => {
+        item.className = "nav-item w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 text-slate-500 hover:bg-slate-50 hover:text-cyan-600";
+      });
+      
+      const activeNav = document.getElementById(`nav-${tab}`);
+      if (activeNav) {
+        activeNav.className = "nav-item w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 bg-cyan-50 text-cyan-700 font-semibold shadow-sm";
+      }
+
+      // 依分頁更改頁面標題
+      const titles = {
+        'dashboard': { title: '數據總覽', desc: '精準掌控您的肌膚投資與健康狀態。' },
+        'inventory': { title: '專業庫存管理', desc: '管理您的保養品資產、效期與狀態。' },
+        'routine': { title: '保養處方箋', desc: '科學化的早晚保養流程建議。' }
+      };
+
+      document.getElementById('view-title').textContent = titles[tab].title;
+      document.getElementById('view-desc').textContent = titles[tab].desc;
+
+      updateUI();
+    };
+
+    window.toggleModal = function(show) {
+      const modal = document.getElementById('modal-container');
+      if (show) {
+        modal.classList.remove('hidden');
+      } else {
+        modal.classList.add('hidden');
+      }
+      lucide.createIcons();
+    };
+
+    window.changeFilter = function(filter) {
+      currentFilter = filter;
+      updateUI();
+    };
+
+    // --- UI 渲染控制中心 ---
+    function updateUI() {
+      const container = document.getElementById('view-content');
+      
+      if (activeTab === 'dashboard') {
+        renderDashboard(container);
+      } else if (activeTab === 'inventory') {
+        renderInventory(container);
+      } else if (activeTab === 'routine') {
+        renderRoutine(container);
+      }
+      
+      // 確保動態生成後，重新渲染 Lucide Icons 圖示
+      lucide.createIcons();
+    }
+
+    // --- 渲染：數據儀表板 ---
+    function renderDashboard(target) {
+      const inUseCount = products.filter(p => p.status === 'in-use').length;
+      const totalValue = products.filter(p => p.status !== 'wishlist').reduce((acc, curr) => acc + curr.price, 0);
+
+      target.innerHTML = `
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+          <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 animate-fade-in">
+            <div class="flex items-center space-x-3 mb-2">
+              <div class="p-2 bg-cyan-50 rounded-lg text-cyan-600"><i data-lucide="box" class="w-6 h-6"></i></div>
+              <h3 class="text-slate-500 font-medium">服役中品項</h3>
+            </div>
+            <p class="text-3xl font-bold text-slate-800">${inUseCount} <span class="text-sm font-normal text-slate-500">件</span></p>
           </div>
-          <div>
-            <h1 className="font-bold text-xl tracking-tight text-slate-800">DermaVault</h1>
-            <p className="text-xs text-cyan-600 tracking-widest font-medium uppercase mt-0.5">Professional</p>
+          
+          <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 animate-fade-in">
+            <div class="flex items-center space-x-3 mb-2">
+              <div class="p-2 bg-emerald-50 rounded-lg text-emerald-600"><i data-lucide="stethoscope" class="w-6 h-6"></i></div>
+              <h3 class="text-slate-500 font-medium">總資產價值</h3>
+            </div>
+            <p class="text-3xl font-bold text-slate-800">NT$ ${totalValue.toLocaleString()}</p>
+          </div>
+          
+          <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 animate-fade-in">
+            <div class="flex items-center space-x-3 mb-2">
+              <div class="p-2 bg-purple-50 rounded-lg text-purple-600"><i data-lucide="heart" class="w-6 h-6"></i></div>
+              <h3 class="text-slate-500 font-medium">收錄保養品總數</h3>
+            </div>
+            <p class="text-3xl font-bold text-slate-800">${products.length} <span class="text-sm font-normal text-slate-500">件</span></p>
           </div>
         </div>
-        
-        <nav className="flex-1 px-4 pb-4 md:pb-6 space-y-2 flex flex-row md:flex-col overflow-x-auto md:overflow-visible hide-scrollbar">
-          <SidebarItem icon={Activity} label="數據儀表板" tab="dashboard" />
-          <SidebarItem icon={Box} label="保養品庫存" tab="inventory" />
-          <SidebarItem icon={ClipboardList} label="早晚處方箋" tab="routine" />
-        </nav>
 
-        <div className="hidden md:block p-6 border-t border-slate-50">
-          <div className="bg-slate-50 rounded-xl p-4 flex items-center justify-between">
-            <div className="flex items-center space-x-3 overflow-hidden">
-              {avatarUrl ? (
-                <img src={avatarUrl} alt="avatar" className="w-10 h-10 rounded-full shadow-sm object-cover" onError={(e) => { e.target.style.display = 'none'; }} />
-              ) : (
-                <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-500 font-bold shadow-sm">
-                  {userInitial}
-                </div>
-              )}
-              <div className="truncate">
-                <p className="text-sm font-bold text-slate-800 truncate">{userName}</p>
-                <p className="text-xs text-slate-500 truncate">線上管理員</p>
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 animate-fade-in">
+          <h3 class="text-lg font-bold text-slate-800 mb-4 flex items-center">
+            <i data-lucide="activity" class="mr-2 text-cyan-600 w-5 h-5"></i> 近期保養焦點提醒
+          </h3>
+          <div class="space-y-4">
+            <div class="flex items-center p-4 bg-slate-50 rounded-xl">
+              <div class="p-2 bg-cyan-100 text-cyan-700 rounded-lg mr-4"><i data-lucide="beaker" class="w-5 h-5"></i></div>
+              <div class="flex-1">
+                <p class="font-medium text-slate-800 text-sm">角質更新與肌膚代謝提醒</p>
+                <p class="text-xs text-slate-500 mt-0.5">若目前正使用水楊酸或酸類，請在白天務必搭配高防曬係數產品，並加強保濕。</p>
               </div>
             </div>
-            <button onClick={handleLogout} className="text-slate-400 hover:text-red-500 p-1">
-              <LogOut size={18} />
-            </button>
+            <div class="flex items-center p-4 bg-slate-50 rounded-xl">
+              <div class="p-2 bg-indigo-100 text-indigo-700 rounded-lg mr-4"><i data-lucide="sparkles" class="w-5 h-5"></i></div>
+              <div class="flex-1">
+                <p class="font-medium text-slate-800 text-sm">修護美白黃金保養期</p>
+                <p class="text-xs text-slate-500 mt-0.5">晚間適當搭配抗老化 A 醇精華，有助於加速淡斑精華與 B3 保養成分吸收。</p>
+              </div>
+            </div>
           </div>
         </div>
-      </aside>
+      `;
+    }
 
-      {/* Main Content */}
-      <main className="flex-1 p-6 md:p-10 overflow-y-auto">
-        <header className="mb-8 flex justify-between items-center">
-          <div>
-            <h2 className="text-2xl md:text-3xl font-bold text-slate-800 mb-1">
-              {activeTab === 'dashboard' && '數據總覽'}
-              {activeTab === 'inventory' && '專業庫存管理'}
-              {activeTab === 'routine' && '保養處方箋'}
-            </h2>
-            <p className="text-slate-500 text-sm">
-              {activeTab === 'dashboard' && '精準掌控您的肌膚投資與健康狀態。'}
-              {activeTab === 'inventory' && '管理您的保養品資產、包含實拍相片。'}
-              {activeTab === 'routine' && '科學化的早晚保養流程建議。'}
-            </p>
+    // --- 渲染：保養品庫存 ---
+    function renderInventory(target) {
+      // 依分類過濾
+      const filtered = currentFilter === '全部' ? products : products.filter(p => p.category === currentFilter);
+
+      let filterButtonsHTML = '';
+      categories.forEach(cat => {
+        const isActive = currentFilter === cat;
+        filterButtonsHTML += `
+          <button onclick="changeFilter('${cat}')" class="whitespace-nowrap px-4 py-2 rounded-full text-sm font-medium transition-colors ${isActive ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'}">
+            ${cat}
+          </button>
+        `;
+      });
+
+      let productsHTML = '';
+      if (filtered.length === 0) {
+        productsHTML = `
+          <div class="col-span-full text-center py-20 bg-white rounded-2xl border border-dashed border-slate-200">
+            <i data-lucide="box" class="mx-auto text-slate-300 mb-4 w-12 h-12"></i>
+            <p class="text-slate-500 text-sm">目前沒有此分類的保養品記錄</p>
           </div>
-        </header>
+        `;
+      } else {
+        filtered.forEach(p => {
+          const catStyle = categoryConfig[p.category] || categoryConfig['全部'];
+          const statusLabels = { 'in-use': '服役中', 'unopened': '庫存未開', 'wishlist': '願望清單' };
+          const statusColors = {
+            'in-use': 'bg-emerald-50 text-emerald-600 border-emerald-200',
+            'unopened': 'bg-blue-50 text-blue-600 border-blue-200',
+            'wishlist': 'bg-purple-50 text-purple-600 border-purple-200'
+          };
+          const statusClass = statusColors[p.status] || 'bg-slate-50 text-slate-600';
+          const statusLabel = statusLabels[p.status] || p.status;
 
-        {activeTab === 'dashboard' && <DashboardView />}
-        {activeTab === 'inventory' && <InventoryView />}
-        {activeTab === 'routine' && <RoutineView />}
-      </main>
+          const imageHTML = p.imageBase64 
+            ? `<div class="w-12 h-12 rounded-xl overflow-hidden shadow-sm border border-slate-100"><img src="${p.imageBase64}" alt="${p.name}" class="w-full h-full object-cover" /></div>`
+            : `<div class="p-3 rounded-xl ${catStyle.bg}"><i data-lucide="${catStyle.icon}" class="${catStyle.color} w-6 h-6"></i></div>`;
 
-      <style dangerouslySetInnerHTML={{__html: `
-        .hide-scrollbar::-webkit-scrollbar { display: none; }
-        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(10px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
-      `}} />
-    </div>
-  );
-}
+          productsHTML += `
+            <div class="bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all p-5 flex flex-col justify-between animate-fade-in">
+              <div>
+                <div class="flex justify-between items-start mb-4">
+                  ${imageHTML}
+                  <span class="px-2.5 py-1 rounded-full text-xs font-medium border ${statusClass}">${statusLabel}</span>
+                </div>
+                <div>
+                  <p class="text-xs font-semibold text-slate-400 tracking-wider uppercase mb-1">${p.brand}</p>
+                  <h4 class="font-bold text-slate-800 text-base leading-snug mb-2">${p.name}</h4>
+                  <span class="px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-600 inline-block mb-2">${p.category}</span>
+                </div>
+              </div>
+              <div class="mt-5 pt-4 border-t border-slate-50 flex justify-between items-end">
+                <p class="text-lg font-bold text-slate-800">NT$ ${p.price.toLocaleString()}</p>
+                <button onclick="requestDelete('${p.id}')" class="text-xs text-red-400 hover:text-red-600 underline transition-colors">移除</button>
+              </div>
+            </div>
+          `;
+        });
+      }
+
+      target.innerHTML = `
+        <div class="space-y-6">
+          <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div class="flex space-x-2 overflow-x-auto pb-2 w-full md:w-auto hide-scrollbar">
+              ${filterButtonsHTML}
+            </div>
+            <button onclick="toggleModal(true)" class="flex items-center space-x-2 bg-cyan-600 text-white px-4 py-2.5 rounded-xl hover:bg-cyan-700 transition-colors shadow-sm text-sm font-semibold">
+              <i data-lucide="plus" class="w-4 h-4"></i>
+              <span>新增保養品</span>
+            </button>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            ${productsHTML}
+          </div>
+        </div>
+      `;
+    }
+
+    // --- 渲染：保養處方箋 ---
+    function renderRoutine(target) {
+      target.innerHTML = `
+        <div class="space-y-6 animate-fade-in flex flex-col items-center justify-center py-12 text-center">
+          <div class="w-24 h-24 bg-purple-50 rounded-full flex items-center justify-center mb-6">
+             <i data-lucide="clipboard-list" class="text-purple-600 w-12 h-12"></i>
+          </div>
+          <h3 class="text-xl font-bold text-slate-800 mb-2">專屬早晚處方箋</h3>
+          <p class="text-slate-500 max-w-md text-sm leading-relaxed">我們正在優化分析引擎，系統將自動比對您資料庫內的真實保養資產成份，為您精確安排最穩定的早晚疊加順序與抗老美白排程。</p>
+          <button onclick="switchTab('inventory')" class="mt-6 text-cyan-600 hover:underline text-sm font-semibold flex items-center space-x-1">
+            <span>前往管理與更新產品庫存</span>
+            <i data-lucide="chevron-right" class="w-4 h-4"></i>
+          </button>
+        </div>
+      `;
+    }
+
+    // --- 實用小組件：自製 Toast 彈窗通知 ---
+    let toastTimeout;
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      const text = document.getElementById('toast-text');
+      text.textContent = msg;
+      
+      clearTimeout(toastTimeout);
+      
+      toast.classList.remove('translate-y-20', 'opacity-0');
+      toast.classList.add('translate-y-0', 'opacity-100');
+      
+      toastTimeout = setTimeout(() => {
+        toast.classList.remove('translate-y-0', 'opacity-100');
+        toast.classList.add('translate-y-20', 'opacity-0');
+      }, 3000);
+    }
+  </script>
+</body>
+</html>
