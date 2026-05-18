@@ -179,76 +179,81 @@ export default function App() {
   };
 
   // --- 模態視窗 (新增保養品) ---
-  const AddProductModal = () => (
-    <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
-      <div className="bg-white rounded-3xl w-full max-w-lg shadow-xl overflow-hidden flex flex-col max-h-[90vh]">
-        <div className="p-6 border-b border-slate-100 flex justify-between items-center">
-          <h3 className="text-xl font-bold text-slate-800">新增保養資產</h3>
-          <button onClick={() => setIsAddingMode(false)} className="text-slate-400 hover:text-slate-600"><X size={24}/></button>
-        </div>
-        <div className="p-6 overflow-y-auto">
-          <form onSubmit={handleAddProduct} className="space-y-4">
-            
-            {/* 圖片上傳區塊 (Base64) */}
-            <div className="flex justify-center mb-6">
-              <label className="relative cursor-pointer group">
-                <div className="w-24 h-24 rounded-2xl bg-slate-50 border-2 border-dashed border-slate-200 flex flex-col items-center justify-center overflow-hidden group-hover:border-cyan-400 transition-colors">
-                  {newProduct.imageBase64 ? (
-                    <img src={newProduct.imageBase64} alt="Preview" className="w-full h-full object-cover" />
-                  ) : (
-                    <>
-                      <ImageIcon className="text-slate-400 mb-1" size={24} />
-                      <span className="text-xs text-slate-400">上傳實拍</span>
-                    </>
-                  )}
+  const AddProductModal = () => {
+    // 預先解構變數，避免預覽器解析物件屬性失敗
+    const { imageBase64, brand, name, category, status, price } = newProduct;
+
+    return (
+      <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
+        <div className="bg-white rounded-3xl w-full max-w-lg shadow-xl overflow-hidden flex flex-col max-h-[90vh]">
+          <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+            <h3 className="text-xl font-bold text-slate-800">新增保養資產</h3>
+            <button onClick={() => setIsAddingMode(false)} className="text-slate-400 hover:text-slate-600"><X size={24}/></button>
+          </div>
+          <div className="p-6 overflow-y-auto">
+            <form onSubmit={handleAddProduct} className="space-y-4">
+              
+              {/* 圖片上傳區塊 (Base64) */}
+              <div className="flex justify-center mb-6">
+                <label className="relative cursor-pointer group">
+                  <div className="w-24 h-24 rounded-2xl bg-slate-50 border-2 border-dashed border-slate-200 flex flex-col items-center justify-center overflow-hidden group-hover:border-cyan-400 transition-colors">
+                    {imageBase64 ? (
+                      <img src={imageBase64} alt="Preview" className="w-full h-full object-cover" />
+                    ) : (
+                      <>
+                        <ImageIcon className="text-slate-400 mb-1" size={24} />
+                        <span className="text-xs text-slate-400">上傳實拍</span>
+                      </>
+                    )}
+                  </div>
+                  <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+                </label>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-sm font-medium text-slate-600">品牌 (Brand)</label>
+                  <input required type="text" value={brand} onChange={e => setNewProduct({...newProduct, brand: e.target.value})} className="w-full p-3 rounded-xl border border-slate-200 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500" placeholder="如: Kiehl's"/>
                 </div>
-                <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
-              </label>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <label className="text-sm font-medium text-slate-600">品牌 (Brand)</label>
-                <input required type="text" value={newProduct.brand} onChange={e => setNewProduct({...newProduct, brand: e.target.value})} className="w-full p-3 rounded-xl border border-slate-200 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500" placeholder="如: Kiehl's"/>
+                <div className="space-y-1">
+                  <label className="text-sm font-medium text-slate-600">名稱 (Product Name)</label>
+                  <input required type="text" value={name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} className="w-full p-3 rounded-xl border border-slate-200 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500" placeholder="如: 金盞花化妝水"/>
+                </div>
               </div>
-              <div className="space-y-1">
-                <label className="text-sm font-medium text-slate-600">名稱 (Product Name)</label>
-                <input required type="text" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} className="w-full p-3 rounded-xl border border-slate-200 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500" placeholder="如: 金盞花化妝水"/>
-              </div>
-            </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <label className="text-sm font-medium text-slate-600">主要功效</label>
-                <select value={newProduct.category} onChange={e => setNewProduct({...newProduct, category: e.target.value})} className="w-full p-3 rounded-xl border border-slate-200 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500">
-                  {categories.filter(c => c !== '全部').map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                </select>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-sm font-medium text-slate-600">主要功效</label>
+                  <select value={category} onChange={e => setNewProduct({...newProduct, category: e.target.value})} className="w-full p-3 rounded-xl border border-slate-200 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500">
+                    {categories.filter(c => c !== '全部').map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-sm font-medium text-slate-600">狀態</label>
+                  <select value={status} onChange={e => setNewProduct({...newProduct, status: e.target.value})} className="w-full p-3 rounded-xl border border-slate-200 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500">
+                    <option value="in-use">服役中</option>
+                    <option value="unopened">未開封/庫存</option>
+                    <option value="wishlist">願望清單</option>
+                  </select>
+                </div>
               </div>
+
               <div className="space-y-1">
-                <label className="text-sm font-medium text-slate-600">狀態</label>
-                <select value={newProduct.status} onChange={e => setNewProduct({...newProduct, status: e.target.value})} className="w-full p-3 rounded-xl border border-slate-200 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500">
-                  <option value="in-use">服役中</option>
-                  <option value="unopened">未開封/庫存</option>
-                  <option value="wishlist">願望清單</option>
-                </select>
+                <label className="text-sm font-medium text-slate-600">購入價格 (NT$)</label>
+                <input type="number" min="0" value={price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} className="w-full p-3 rounded-xl border border-slate-200 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500" placeholder="0"/>
               </div>
-            </div>
 
-            <div className="space-y-1">
-              <label className="text-sm font-medium text-slate-600">購入價格 (NT$)</label>
-              <input type="number" min="0" value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} className="w-full p-3 rounded-xl border border-slate-200 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500" placeholder="0"/>
-            </div>
-
-            <div className="pt-4">
-              <button type="submit" className="w-full bg-cyan-600 text-white font-bold py-3 rounded-xl hover:bg-cyan-700 transition-colors shadow-sm">
-                建檔存入系統
-              </button>
-            </div>
-          </form>
+              <div className="pt-4">
+                <button type="submit" className="w-full bg-cyan-600 text-white font-bold py-3 rounded-xl hover:bg-cyan-700 transition-colors shadow-sm">
+                  建檔存入系統
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   // --- 視圖元件 ---
   const DashboardView = () => (
@@ -317,38 +322,42 @@ export default function App() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredProducts.map(product => {
-              const catConf = categoryConfig[product.category] || categoryConfig['全部'];
+              // 預先解構變數
+              const { id, category, imageBase64, status, brand, name, price } = product;
+              const catConf = categoryConfig[category] || categoryConfig['全部'];
               const Icon = catConf.icon;
+              const iconColor = catConf.color;
+              const iconBg = catConf.bg;
               
               return (
-                <div key={product.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow p-5 group relative overflow-hidden flex flex-col justify-between">
+                <div key={id} className="bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow p-5 group relative overflow-hidden flex flex-col justify-between">
                   <div>
                     <div className="flex justify-between items-start mb-4">
-                      {product.imageBase64 ? (
+                      {imageBase64 ? (
                         <div className="w-12 h-12 rounded-xl overflow-hidden shadow-sm border border-slate-100">
-                          <img src={product.imageBase64} alt={product.name} className="w-full h-full object-cover" />
+                          <img src={imageBase64} alt={name} className="w-full h-full object-cover" />
                         </div>
                       ) : (
-                        <div className={`p-3 rounded-xl ${catConf.bg} transition-colors`}>
-                          <Icon className={`${catConf.color}`} size={24} />
+                        <div className={`p-3 rounded-xl ${iconBg} transition-colors`}>
+                          <Icon className={iconColor} size={24} />
                         </div>
                       )}
-                      <StatusBadge status={product.status} />
+                      <StatusBadge status={status} />
                     </div>
                     <div>
-                      <p className="text-xs font-semibold text-slate-400 tracking-wider uppercase mb-1">{product.brand}</p>
-                      <h4 className="font-bold text-slate-800 text-lg leading-tight mb-2">{product.name}</h4>
+                      <p className="text-xs font-semibold text-slate-400 tracking-wider uppercase mb-1">{brand}</p>
+                      <h4 className="font-bold text-slate-800 text-lg leading-tight mb-2">{name}</h4>
                       <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-600 inline-block mb-2">
-                        {product.category}
+                        {category}
                       </span>
                     </div>
                   </div>
                   <div className="mt-5 pt-4 border-t border-slate-50 flex justify-between items-end">
                     <div>
-                      <p className="text-lg font-bold text-slate-800">NT$ {product.price}</p>
+                      <p className="text-lg font-bold text-slate-800">NT$ {price}</p>
                     </div>
                     <button 
-                      onClick={() => handleDeleteProduct(product.id)}
+                      onClick={() => handleDeleteProduct(id)}
                       className="text-xs text-red-400 hover:text-red-600 underline"
                     >
                       移除
@@ -374,8 +383,10 @@ export default function App() {
     </div>
   );
 
-  // 安全地處理頭像網址 (如果有登入但沒有照片，給一個預設大頭貼)
-  const userAvatar = user?.photoURL || "https://ui-avatars.com/api/?name=User&background=0D8ABC&color=fff";
+  // 安全地處理頭像網址與使用者名稱
+  const avatarUrl = user?.photoURL || "";
+  const userName = user?.displayName || "使用者";
+  const userInitial = userName.charAt(0);
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-800 flex flex-col md:flex-row">
@@ -402,15 +413,15 @@ export default function App() {
         <div className="hidden md:block p-6 border-t border-slate-50">
           <div className="bg-slate-50 rounded-xl p-4 flex items-center justify-between">
             <div className="flex items-center space-x-3 overflow-hidden">
-              {(user && user.photoURL) ? (
-                <img src={user.photoURL} alt="avatar" className="w-10 h-10 rounded-full shadow-sm object-cover" onError={(e) => { e.target.style.display = 'none'; }} />
+              {avatarUrl ? (
+                <img src={avatarUrl} alt="avatar" className="w-10 h-10 rounded-full shadow-sm object-cover" onError={(e) => { e.target.style.display = 'none'; }} />
               ) : (
                 <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-500 font-bold shadow-sm">
-                  {(user && user.displayName) ? user.displayName.charAt(0) : 'U'}
+                  {userInitial}
                 </div>
               )}
               <div className="truncate">
-                <p className="text-sm font-bold text-slate-800 truncate">{(user && user.displayName) ? user.displayName : '使用者'}</p>
+                <p className="text-sm font-bold text-slate-800 truncate">{userName}</p>
                 <p className="text-xs text-slate-500 truncate">線上管理員</p>
               </div>
             </div>
